@@ -32,4 +32,4 @@ namespace logscan
         unsigned long long bytes_processed_;
     };
 
-} // logscan
+} // namespace logscan

@@ -10,7 +10,6 @@
  */
 
 #include <cstring>
-#include <chrono>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -23,7 +22,7 @@
 #include <hs.h>
 #include <pcre.h>
 
-#include "logscan/DoubleBuffer.h"
+#include "logscan/logscan.h"
 
 using std::cerr;
 using std::cout;
@@ -35,25 +34,6 @@ using std::unordered_map;
 using std::vector;
 
 using namespace logscan;
-
-// Simple timing class
-class Clock {
-public:
-    void start() {
-        time_start = std::chrono::system_clock::now();
-    }
-
-    void stop() {
-        time_end = std::chrono::system_clock::now();
-    }
-
-    double seconds() const {
-        std::chrono::duration<double> delta = time_end - time_start;
-        return delta.count();
-    }
-private:
-    std::chrono::time_point<std::chrono::system_clock> time_start, time_end;
-};
 
 // Class wrapping all state associated with the benchmark
 class Benchmark {
@@ -273,137 +253,14 @@ public:
     }
 };
 
-// helper function - see end of file
-static void parseFile(const char *filename, vector<string> &patterns,
-                      vector<unsigned> &flags, vector<string> &ids);
-
-static hs_database_t *buildDatabase(const vector<const char *> &expressions,
-                                    const vector<unsigned> &flags,
-                                    unsigned int mode,
-                                    vector<pcre*> *compiled_patterns) {
-    hs_database_t *db;
-    hs_compile_error_t *compileErr;
-    hs_error_t err;
-
-    Clock clock;
-    clock.start();
-
-    vector<unsigned> ids(expressions.size());
-    for (size_t i = 0; i < expressions.size(); i++)
-        ids[i] = i;
-
-    err = hs_compile_multi(expressions.data(), flags.data(), ids.data(),
-                           expressions.size(), mode, nullptr, &db, &compileErr);
-
-    clock.stop();
-
-    if (err != HS_SUCCESS) {
-        if (compileErr->expression < 0) {
-            // The error does not refer to a particular expression.
-            cerr << "ERROR: " << compileErr->message << endl;
-        } else {
-            cerr << "ERROR: Pattern '" << expressions[compileErr->expression]
-                 << "' failed compilation with error: " << compileErr->message
-                 << endl;
-        }
-        // As the compileErr pointer points to dynamically allocated memory, if
-        // we get an error, we must be sure to release it. This is not
-        // necessary when no error is detected.
-        hs_free_compile_error(compileErr);
-        exit(-1);
-    }
-
-    cout << "Hyperscan streaming"
-         << " mode database compiled in " << clock.seconds() << " seconds."
-         << endl;
-
-    if (compiled_patterns != nullptr) {
-        // compile all patterns with PCRE
-        clock.start();
-
-        for (const char* pattern : expressions) {
-            const char *error;
-            int erroffset;
-
-            pcre *re = pcre_compile(
-                pattern,              /* the pattern */
-                0,                    /* default options */
-                &error,               /* for error message */
-                &erroffset,           /* for error offset */
-                nullptr);             /* use default character tables */
-
-            if (re == nullptr) {
-                printf("PCRE compilation failed at offset %d: %s\n", erroffset, error);
-                exit(-1); // TODO
-            }
-
-
-            compiled_patterns->push_back(re);
-        }
-
-        clock.stop();
-        cout << std::fixed << std::setprecision(4);
-        cout << "Compilation of PCRE patterns took " << clock.seconds() << " seconds."
-            << endl;
-    }
-
-    return db;
-}
-
-/**
- * This function will read in the file with the specified name, with an
- * expression per line, ignoring lines starting with '#' and build a Hyperscan
- * database for it.
- */
-static void databasesFromFile(const char *filename,
-                              hs_database_t **db_streaming,
-                              vector<pcre*> &compiled_patterns,
-                              vector<string> &ids) {
-    // hs_compile_multi requires three parallel arrays containing the patterns,
-    // flags and ids that we want to work with. To achieve this we use
-    // vectors and new entries onto each for each valid line of input from
-    // the pattern file.
-    vector<string> patterns;
-    vector<unsigned> flags;
-
-    // do the actual file reading and string handling
-    parseFile(filename, patterns, flags, ids);
-
-    // Turn our vector of strings into a vector of char*'s to pass in to
-    // hs_compile_multi. (This is just using the vector of strings as dynamic
-    // storage.)
-    vector<const char*> cstrPatterns;
-    for (const auto &pattern : patterns) {
-        cstrPatterns.push_back(pattern.c_str());
-    }
-
-    cout << "Compiling Hyperscan databases with " << patterns.size()
-         << " patterns." << endl;
-
-    //*db_block = buildDatabase(cstrPatterns, flags, HS_MODE_BLOCK, &compiled_patterns);
-
-    for (auto &flag : flags) {
-        flag = flag | HS_FLAG_SOM_LEFTMOST;
-    }
-
-    *db_streaming = buildDatabase(
-        cstrPatterns,
-        flags,
-        HS_MODE_STREAM | HS_MODE_SOM_HORIZON_SMALL, // will find patterns having length up to 2^16
-        &compiled_patterns
-    );
-
-}
-
 static void usage(const char *prog) {
     cerr << "Usage: " << prog << " [-n repeats] <pattern file> <log file>" << endl;
 }
 
-// Main entry point.
 int main(int argc, char **argv) {
     unsigned int repeatCount = 1;
 
-    // Process command line arguments.
+    // Process command line arguments
     int opt;
     while ((opt = getopt(argc, argv, "n:")) != -1) {
         switch (opt) {
@@ -421,106 +278,20 @@ int main(int argc, char **argv) {
         exit(-1);
     }
 
-    const char *patternFile = argv[optind];
-    const char *input_file = argv[optind + 1];
+    const char *patternsFile = argv[optind];
+    const char *inputFile = argv[optind + 1];
 
-    // Read our pattern set in and build Hyperscan databases from it.
-    cout << "Pattern file: " << patternFile << endl;
-    hs_database_t *db_streaming;
-    vector<pcre*> compiled_patterns;
-    vector<string> ids;
-    databasesFromFile(patternFile, &db_streaming, compiled_patterns, ids);
+    auto db = PatternsDB::loadFromFile(patternsFile);
 
-    Benchmark bench(db_streaming, compiled_patterns, ids);
+    // Benchmark bench(db_streaming, compiled_patterns, ids);
 
-    if (repeatCount != 1) {
-        cout << "Repeating PCAP scan " << repeatCount << " times." << endl;
-    }
+    // if (repeatCount != 1) {
+    //     cout << "Repeating PCAP scan " << repeatCount << " times." << endl;
+    // }
 
-
-    bench.openStream();
-    bench.scanStream(input_file);
-    bench.closeStream();
-
-    // Close Hyperscan databases
-    hs_free_database(db_streaming);
+    // bench.openStream();
+    // bench.scanStream(input_file);
+    // bench.closeStream();
 
     return 0;
 }
-
-static unsigned parseFlags(const string &flagsStr) {
-    unsigned flags = 0;
-    for (const auto &c : flagsStr) {
-        switch (c) {
-        case 'i':
-            flags |= HS_FLAG_CASELESS; break;
-        case 'm':
-            flags |= HS_FLAG_MULTILINE; break;
-        case 's':
-            flags |= HS_FLAG_DOTALL; break;
-        case 'H':
-            flags |= HS_FLAG_SINGLEMATCH; break;
-        case 'V':
-            flags |= HS_FLAG_ALLOWEMPTY; break;
-        case '8':
-            flags |= HS_FLAG_UTF8; break;
-        case 'W':
-            flags |= HS_FLAG_UCP; break;
-        case '\r': // stray carriage-return
-            break;
-        default:
-            cerr << "Unsupported flag \'" << c << "\'" << endl;
-            exit(-1);
-        }
-    }
-    return flags;
-}
-
-static void parseFile(const char *filename, vector<string> &patterns,
-                      vector<unsigned> &flags, vector<string> &ids) {
-    ifstream inFile(filename);
-    if (!inFile.good()) {
-        cerr << "ERROR: Can't open pattern file \"" << filename << "\"" << endl;
-        exit(-1);
-    }
-
-    for (unsigned i = 1; !inFile.eof(); ++i) {
-        string line;
-        getline(inFile, line);
-
-        // if line is empty, or a comment, we can skip it
-        if (line.empty() || line[0] == '#') {
-            continue;
-        }
-
-        // otherwise, it should be ID:PCRE, e.g.
-        //  10001:/foobar/is
-
-        size_t colonIdx = line.find_first_of(':');
-        if (colonIdx == string::npos) {
-            cerr << "ERROR: Could not parse line " << i << endl;
-            exit(-1);
-        }
-
-        // we should have a string as an ID, before the colon
-        const string id = line.substr(0, colonIdx);
-
-        // rest of the expression is the PCRE
-        const string expr(line.substr(colonIdx + 1));
-
-        size_t flagsStart = expr.find_last_of('/');
-        if (flagsStart == string::npos) {
-            cerr << "ERROR: no trailing '/' char" << endl;
-            exit(-1);
-        }
-
-        string pcre(expr.substr(1, flagsStart - 1));
-        string flagsStr(expr.substr(flagsStart + 1, expr.size() - flagsStart));
-        unsigned flag = parseFlags(flagsStr);
-
-        patterns.push_back(pcre);
-        flags.push_back(flag);
-        ids.push_back(id);
-    }
-}
-

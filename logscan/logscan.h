@@ -1,3 +1,5 @@
 #pragma once
 
-int test_fn(int x);
+#include "Clock.h"
+#include "DoubleBuffer.h"
+#include "PatternsDB.h"
