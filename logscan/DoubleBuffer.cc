@@ -1,7 +1,7 @@
 #include "DoubleBuffer.h"
 
-#include <iostream>
 #include <cstring>
+#include <iostream>
 
 using namespace std;
 
@@ -19,10 +19,9 @@ namespace logscan
 
     DoubleBuffer::~DoubleBuffer()
     {
-
     }
 
-    const char* DoubleBuffer::getMatch(unsigned long long to, unsigned long long from) {
+    const char* DoubleBuffer::GetMatch(unsigned long long to, unsigned long long from) {
         const int match_length = to - from;
         if (match_length > buffer_size_) {
             cerr << "Match length is greater than the buffer size" << endl;
@@ -60,13 +59,13 @@ namespace logscan
         return match;
     }
 
-    bool DoubleBuffer::scanStream(istream& stream, scanBufferFn scanBuffer, void* context)
+    bool DoubleBuffer::ScanStream(istream& stream, ScanBufferFn scan_buffer_fn, void* context)
     {
         for (;;) {
             stream.read(curr_buffer_, buffer_size_);
             const unsigned int bytes_read = stream.gcount();
 
-            if (!scanBuffer(curr_buffer_, bytes_read, context))
+            if (!scan_buffer_fn(curr_buffer_, bytes_read, context))
                 return false;
 
             bytes_processed_ += bytes_read;

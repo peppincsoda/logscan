@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LOGSCAN_CLOCK_H_
+#define LOGSCAN_CLOCK_H_
 
 #include <chrono>
 
@@ -23,3 +24,5 @@ namespace logscan
         std::chrono::time_point<std::chrono::system_clock> time_start, time_end;
     };
 } // namespace logscan
+
+#endif  // LOGSCAN_CLOCK_H_

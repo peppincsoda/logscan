@@ -1,4 +1,5 @@
-#pragma once
+#ifndef LOGSCAN_DOUBLEBUFFER_H_
+#define LOGSCAN_DOUBLEBUFFER_H_
 
 #include <string>
 #include <iosfwd>
@@ -8,13 +9,13 @@ namespace logscan
     class DoubleBuffer
     {
     public:
-        using scanBufferFn = bool (const char* buffer, unsigned int buffer_size, void* context);
+        using ScanBufferFn = bool (const char* buffer, unsigned int buffer_size, void* context);
 
         explicit DoubleBuffer(int buffer_size);
         ~DoubleBuffer();
 
-        const char* getMatch(unsigned long long to, unsigned long long from);
-        bool scanStream(std::istream& stream, scanBufferFn scanBuffer, void* context);
+        const char* GetMatch(unsigned long long to, unsigned long long from);
+        bool ScanStream(std::istream& stream, ScanBufferFn scan_buffer_fn, void* context);
 
         DoubleBuffer(const DoubleBuffer&) = delete;
         DoubleBuffer& operator=(const DoubleBuffer&) = delete;
@@ -33,3 +34,5 @@ namespace logscan
     };
 
 } // namespace logscan
+
+#endif  // LOGSCAN_DOUBLEBUFFER_H_

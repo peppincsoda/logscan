@@ -1,11 +1,13 @@
 
 set(SOURCES
-    logscan.h
-    logscan.cc
     DoubleBuffer.h
     DoubleBuffer.cc
-    PatternsDB.h
-    PatternsDB.cc
+    RegexDB.h
+    RegexDB.cc
+    Scanner.h
+    Scanner.cc
+    logscan.h
+    logscan.cc
     )
 
 add_library(logscan ${SOURCES})
@@ -25,8 +27,9 @@ if (PKG_CONFIG_FOUND)
 endif()
 
 set(SOURCES_TEST
-    logscan_test.cc
-    PatternsDB_test.cc
+    DoubleBuffer_test.cc
+    RegexDB_test.cc
+    Scanner_test.cc
     )
 
 add_executable(logscan_test ${SOURCES_TEST})
