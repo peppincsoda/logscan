@@ -21,6 +21,7 @@ namespace logscan
     {
     }
 
+    // The returned string is not zero-terminated!
     const char* DoubleBuffer::GetMatch(unsigned long long to, unsigned long long from) {
         const int match_length = to - from;
         if (match_length > buffer_size_) {

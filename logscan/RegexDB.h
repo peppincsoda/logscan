@@ -39,7 +39,13 @@ namespace logscan
         void Execute(const char* buffer, int buffer_length, unsigned int hs_id, MatchResults& match_results) const;
 
     private:
-        friend class Scanner;
+        struct PCRE
+        {
+            pcre* pcregex;
+            int name_count;
+            int name_entry_size;
+            char* name_table;
+        };
 
         void CompileHS();
         void CompilePCRE();
@@ -49,7 +55,7 @@ namespace logscan
         std::vector<unsigned int> flags_;
 
         hs_database_t* hs_db_;
-        std::vector<pcre*> pcres_;
+        std::vector<PCRE> pcres_;
         bool compiled_;
     };
 

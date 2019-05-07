@@ -22,8 +22,8 @@ namespace logscan
 
     RegexDB::~RegexDB()
     {
-        for (auto re : pcres_) {
-            pcre_free(re);
+        for (PCRE& pcre_data : pcres_) {
+            pcre_free(pcre_data.pcregex);
         }
 
         if (hs_db_ != nullptr) {
@@ -131,20 +131,51 @@ namespace logscan
         clock.start();
 
         for (const auto& pattern : patterns_) {
+            pcres_.push_back();
+            PCRE& pcre_data = pcres_.back();
+
             const char* err;
             int erroffset;
 
-            pcre* re = pcre_compile(
+            pcre_data.pcregex = pcre_compile(
                 pattern.c_str(),      /* the pattern */
                 0,                    /* default options */
                 &err,                 /* for error message */
                 &erroffset,           /* for error offset */
                 nullptr);             /* use default character tables */
 
-            if (re == nullptr) {
+            if (pcre_data.pcregex == nullptr) {
                 cerr << "PCRE compilation failed at offset " << erroffset << ":" << err << endl;
-                exit(-1);
+                // TODO: free err?
             }
+
+            pcre_fullinfo(
+                pcre_data.pcregex,      /* the compiled pattern */
+                nullptr,                /* no extra data - we didn't study the pattern */
+                PCRE_INFO_NAMECOUNT,    /* number of named substrings */
+                &pcre_data.name_count); /* where to put the answer */
+
+            if (pcre_data.name_count > 0) {
+                if (pcre_data.name_count > OVECCOUNT/3) {
+                    // TODO: cout << "ovector only has room for " << ((OVECCOUNT/3) - 1) << " captured substrings" << endl;
+                    cerr << "" << endl;
+                    pcre_free(pcre_data.pcregex);
+                    pcre_data.pcregex = nullptr
+                }
+
+                pcre_fullinfo(
+                    pcre_data.pcregex,        /* the compiled pattern */
+                    nullptr,                  /* no extra data - we didn't study the pattern */
+                    PCRE_INFO_NAMETABLE,      /* address of the table */
+                    &pcre_data.name_table);   /* where to put the answer */
+
+                pcre_fullinfo(
+                    pcre_data.pcregex,           /* the compiled pattern */
+                    nullptr,                     /* no extra data - we didn't study the pattern */
+                    PCRE_INFO_NAMEENTRYSIZE,     /* size of each entry in the table */
+                    &pcre_data.name_entry_size); /* where to put the answer */
+            }
+
 
             pcres_.push_back(re);
         }
@@ -245,55 +276,25 @@ namespace logscan
         if (rc < 0) {
             switch(rc) {
             // This can happen as PCRE does a greedy match while HS doesn't
-            case PCRE_ERROR_NOMATCH: cout << "Mismatch between Hyperscan and PCRE" << endl; break;
+            case PCRE_ERROR_NOMATCH: cerr << "Mismatch between Hyperscan and PCRE" << endl; break;
             /*
             Handle other special cases if you like
             */
-            default: cout << "Matching error " << rc << endl; break;
+            default: cerr << "Matching error " << rc << endl; break;
             }
-            return; // TODO: error handling
+            return; // TODO: error handling; no output in this case
         }
 
-        /* The output vector wasn't big enough */
-        if (rc == 0) {
-            cout << "ovector only has room for " << ((OVECCOUNT/3) - 1) << " captured substrings" << endl;
-        }
+        // It cannot happen that there is not enough space for named groups
+        assert(rc != 0);
 
-        /* See if there are any named substrings, and if so, show them by name. First
-        we have to extract the count of named parentheses from the pattern. */
+        const PCRE& pcre_data = pcres_[regex_id];
 
-        int namecount;
-        pcre_fullinfo(
-            re,                   /* the compiled pattern */
-            nullptr,              /* no extra data - we didn't study the pattern */
-            PCRE_INFO_NAMECOUNT,  /* number of named substrings */
-            &namecount);          /* where to put the answer */
-
-        if (namecount <= 0) {
-            //printf("No named substrings\n");
+        if (pcre_data.name_count <= 0) {
+            // TODO: output the regex_id only
         } else {
-            int name_entry_size;
-            char* name_table;
-            char* tabptr;
-            //printf("Named substrings\n");
-
-            /* Before we can access the substrings, we must extract the table for
-            translating names to numbers, and the size of each entry in the table. */
-
-            pcre_fullinfo(
-                re,                       /* the compiled pattern */
-                nullptr,                  /* no extra data - we didn't study the pattern */
-                PCRE_INFO_NAMETABLE,      /* address of the table */
-                &name_table);             /* where to put the answer */
-
-            pcre_fullinfo(
-                re,                       /* the compiled pattern */
-                nullptr,                  /* no extra data - we didn't study the pattern */
-                PCRE_INFO_NAMEENTRYSIZE,  /* size of each entry in the table */
-                &name_entry_size);        /* where to put the answer */
-
-            /* Now we can scan the table and, for each entry, print the number, the name,
-            and the substring itself. */
+            // TODO: output the regex_id as well
+            char* tabptr = pcre_data.name_table;
 
             tabptr = name_table;
             match_results.regex_id = ids_[hs_id];
