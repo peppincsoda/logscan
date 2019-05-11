@@ -1,5 +1,7 @@
 
 set(SOURCES
+    Clock.h
+    Clock.cc
     HyperscanDB.h
     HyperscanDB.cc
     PCREDB.h
@@ -27,3 +29,11 @@ if (PKG_CONFIG_FOUND)
     target_link_libraries(logscan ${LIBPCRE_LIBRARIES})
   endif()
 endif()
+
+set(SOURCES_TEST
+    Scanner_test.cc
+    )
+
+add_executable(logscan_test ${SOURCES_TEST})
+
+target_link_libraries(logscan_test logscan gtest_main gtest pthread)
