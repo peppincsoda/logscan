@@ -1,9 +1,11 @@
 
 set(SOURCES
-    DoubleBuffer.h
-    DoubleBuffer.cc
-    RegexDB.h
-    RegexDB.cc
+    HyperscanDB.h
+    HyperscanDB.cc
+    PCREDB.h
+    PCREDB.cc
+    RegexArray.h
+    RegexArray.cc
     Scanner.h
     Scanner.cc
     logscan.h
@@ -25,13 +27,3 @@ if (PKG_CONFIG_FOUND)
     target_link_libraries(logscan ${LIBPCRE_LIBRARIES})
   endif()
 endif()
-
-set(SOURCES_TEST
-    DoubleBuffer_test.cc
-    RegexDB_test.cc
-    Scanner_test.cc
-    )
-
-add_executable(logscan_test ${SOURCES_TEST})
-
-target_link_libraries(logscan_test logscan gtest_main gtest pthread)

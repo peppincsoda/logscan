@@ -6,84 +6,75 @@ using namespace std;
 
 namespace logscan
 {
-    Scanner::Scanner(const RegexDB& regex_db, ScannerMatchFn match_fn)
-    : regex_db_(regex_db)
+    Scanner::Scanner(ScannerMatchFn match_fn)
+    : regex_array_()
+    , hs_db_()
+    , pcre_db_()
     , match_fn_(std::move(match_fn))
-    , dbl_buf_(16) // TODO: parameterize?
-    , scratch_(nullptr)
-    , stream_(nullptr)
     {
-        hs_error_t err = hs_alloc_scratch(regex_db_.hs_db_, &scratch_);
-        if (err != HS_SUCCESS) {
-            cerr << "ERROR: could not allocate scratch space. Exiting." << endl;
-            exit(-1);
-        }
-
-        err = hs_open_stream(regex_db_.hs_db_, 0, &stream_);
-        if (err != HS_SUCCESS) {
-            cerr << "ERROR: Unable to open stream. Exiting." << endl;
-            exit(-1);
-        }
     }
 
     Scanner::~Scanner()
     {
-        // Close Hyperscan stream (potentially generating any end-anchored matches)
-        hs_error_t err = hs_close_stream(stream_, scratch_, OnMatch,
-                                            this);
-        if (err != HS_SUCCESS) {
-            cerr << "ERROR: Unable to close stream. Exiting." << endl;
-            exit(-1);
-        }
-
-        if (scratch_ != nullptr) {
-            hs_free_scratch(scratch_);
-            scratch_ = nullptr;
-        }
     }
 
-    // Match event handler: called every time Hyperscan finds a match.
-    int Scanner::OnMatch(unsigned int id, unsigned long long from, unsigned long long to,
-        unsigned int flags, void* context)
+    bool Scanner::BuildFrom(const char* patterns_file)
     {
-        return static_cast<Scanner*>(context)->OnMatch(id, from, to, flags);
-    }
-
-    int Scanner::OnMatch(unsigned int id, unsigned long long from, unsigned long long to,
-        unsigned int flags)
-    {
-        const char* match = dbl_buf_.GetMatch(to, from);
-        if (match == nullptr)
-            return 0;
-        const int match_length = to - from;
-
-        MatchResults match_results;
-        regex_db_.Execute(match, match_length, id, match_results);
-
-        match_fn_(match_results);
-
-        return 0; // continue matching
-    }
-
-    bool Scanner::ScanBuffer(const char* buffer, unsigned int buffer_size, void* context) {
-        Scanner* self = static_cast<Scanner*>(context);
-
-        hs_error_t err = hs_scan_stream(self->stream_,
-                                        buffer, buffer_size, 0,
-                                        self->scratch_, OnMatch, self);
-        if (err != HS_SUCCESS) {
-            cerr << "ERROR: Unable to scan buffer. Exiting." << endl;
+        if (!regex_array_.LoadFromFile(patterns_file))
             return false;
-        }
+
+        if (!hs_db_.BuildFrom(regex_array_))
+            return false;
+
+        if (!pcre_db_.BuildFrom(regex_array_))
+            return false;
+
         return true;
     }
 
-    void Scanner::ScanStream(istream& input_stream)
+    bool Scanner::ProcessLine(const string& line, MatchResults& results)
     {
-        dbl_buf_.ScanStream(input_stream, ScanBuffer, this);
+        CaptureGroups::iterator message_it = results.capture_groups.end();
+        if (regex_array_.prefix_regex_index() != -1) {
+            if (pcre_db_.MatchRegex(regex_array_.prefix_regex_index(), line, results.capture_groups)) {
+                message_it = results.capture_groups.find("message");
+                // prefix_regex must contain a capture group named "message"
+            }
+        }
+
+        const string* message = nullptr;
+        if (message_it != results.capture_groups.end()) {
+            message = &message_it->second;
+        } else {
+            message = &line;
+        }
+
+        const int regex_index = hs_db_.FindRegex(*message);
+        results.regex_id = regex_array_.get(regex_index).id;
+        if (regex_index == -1)
+            return false;
+
+        if (!pcre_db_.MatchRegex(regex_index, *message, results.capture_groups))
+            return false;
+
+        if (message_it != results.capture_groups.end()) {
+            results.capture_groups.erase(message_it); // delete "message" from the output
+        }
     }
 
-    void PrintJSONMatchFn(const MatchResults& results, std::ostream& output_stream)
+    bool Scanner::ScanStream(istream& input_stream)
+    {
+        for (string line; getline(input_stream, line); ) {
+            line.push_back('\n');
+
+            MatchResults results;
+            if (ProcessLine(line, results)) {
+                match_fn_(results);
+            }
+        }
+    }
+
+    void PrintJSONMatchFn(const MatchResults& results, ostream& output_stream)
     {
         output_stream << "{ \"id\": \"" << results.regex_id << "\"";
         for (const auto& group : results.capture_groups) {

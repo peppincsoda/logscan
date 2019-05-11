@@ -1,22 +1,27 @@
 #ifndef LOGSCAN_SCANNER_H_
 #define LOGSCAN_SCANNER_H_
 
-#include <iosfwd>
 #include <functional>
+#include <string>
 
-#include "DoubleBuffer.h"
-#include "RegexDB.h"
+#include "HyperscanDB.h"
+#include "PCREDB.h"
+#include "RegexArray.h"
 
 namespace logscan
 {
-    using ScannerMatchFn = std::function<void (const MatchResults& results)>;
+    struct MatchResults
+    {
+        std::string regex_id;
+        CaptureGroups capture_groups;
+    };
 
-    void PrintJSONMatchFn(const MatchResults& results, std::ostream& output_stream);
+    using ScannerMatchFn = std::function<void (const MatchResults& results)>;
 
     class Scanner
     {
     public:
-        explicit Scanner(const RegexDB& regex_db, ScannerMatchFn match_fn);
+        explicit Scanner(ScannerMatchFn match_fn);
         ~Scanner();
 
         Scanner(const Scanner&) = delete;
@@ -25,27 +30,21 @@ namespace logscan
         Scanner(Scanner&&) = default;
         Scanner& operator=(Scanner&&) = default;
 
-        void ScanStream(std::istream& input_stream);
+        bool BuildFrom(const char* patterns_file);
+
+        bool ScanStream(std::istream& input_stream);
 
     private:
-        static int OnMatch(unsigned int id, unsigned long long from, unsigned long long to,
-            unsigned int flags, void* context);
-        int OnMatch(unsigned int id, unsigned long long from, unsigned long long to,
-            unsigned int flags);
-        static bool ScanBuffer(const char* buffer, unsigned int buffer_size, void* context);
+        bool ProcessLine(const std::string& line, MatchResults& match_results);
 
-    private:
-        const RegexDB& regex_db_;
+        RegexArray regex_array_;
+        HyperscanDB hs_db_;
+        PCREDB pcre_db_;
         ScannerMatchFn match_fn_;
-
-        DoubleBuffer dbl_buf_;
-
-        // Hyperscan temporary scratch space
-        hs_scratch_t* scratch_;
-
-        // Hyperscan stream state
-        hs_stream_t* stream_;
     };
+
+    void PrintJSONMatchFn(const MatchResults& results, std::ostream& output_stream);
+
 } // namespace logscan
 
 #endif  // LOGSCAN_SCANNER_H_
