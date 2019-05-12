@@ -75,6 +75,11 @@ namespace logscan
     bool Scanner::ScanStream(istream& input_stream)
     {
         for (string line; getline(input_stream, line); ) {
+            // Support both Windows and macOS/Linux line endings
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+
             MatchResults results;
             if (ProcessLine(line, results)) {
                 match_fn_(results);
