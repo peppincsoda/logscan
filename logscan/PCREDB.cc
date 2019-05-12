@@ -70,11 +70,11 @@ namespace logscan
         }
     }
 
-    bool PCREDB::MatchRegex(int index, const std::string& line, CaptureGroups& capture_groups) const
+    PCREDB::MatchResult PCREDB::MatchRegex(int index, const std::string& line, CaptureGroups& capture_groups) const
     {
         const PCRE& pcre_data = pcres_[index];
 
-        vector<int> output_vector(pcre_data.name_count * 3);
+        vector<int> output_vector((pcre_data.name_count + 1) * 3);
         const int rc = pcre_exec(
             pcre_data.pcregex,     /* the compiled pattern */
             nullptr,               /* no extra data - we didn't study the pattern */
@@ -88,19 +88,12 @@ namespace logscan
         if (rc < 0) {
             switch(rc) {
             case PCRE_ERROR_NOMATCH:
-                // This can happen as PCRE does a greedy match while HS doesn't
-                cerr << "Mismatch between Hyperscan and PCRE" << endl;
-                break;
+                return PCRE_NoMatch;
             default:
-                cerr << "Matching error " << rc << endl;
-                break;
+                cerr << "PCRE matching error: " << rc << endl;
+                return PCRE_Error;
             }
-
-            return false;
         }
-
-        // It cannot happen that there is not enough space for named groups
-        assert(rc != 0);
 
         if (pcre_data.name_count > 0) {
             char* tabptr = pcre_data.name_table;
@@ -108,13 +101,14 @@ namespace logscan
             for (int i = 0; i < pcre_data.name_count; i++) {
                 const int n = (tabptr[0] << 8) | tabptr[1];
 
-                capture_groups[string(tabptr + 2, pcre_data.name_entry_size - 3)] =
-                    string(line.c_str() + output_vector[2*n], output_vector[2*n+1] - output_vector[2*n]);
+                string key(tabptr + 2);
+                string value(line.c_str() + output_vector[2*n], output_vector[2*n+1] - output_vector[2*n]);
+                capture_groups[std::move(key)] = std::move(value);
                 tabptr += pcre_data.name_entry_size;
             }
         }
 
-        return true;
+        return PCRE_OK;
     }
 
 } // namespace logscan

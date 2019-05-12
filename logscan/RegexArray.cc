@@ -19,11 +19,7 @@ namespace logscan
             prefix_regex_index_ = regexes_.size();
         }
 
-        regexes_.emplace_back(Regex {
-            .id = id,
-            .pattern = pattern,
-            .flags = flags,
-        });
+        regexes_.emplace_back(Regex { id, pattern, flags });
     }
 
     bool RegexArray::LoadFromFile(const char* filename)

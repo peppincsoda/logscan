@@ -9,19 +9,21 @@ namespace logscan
     HyperscanDB::HyperscanDB()
     : db_(nullptr)
     , scratch_(nullptr)
-    , match_id_(0)
+    , match_id_(-1)
     {
     }
 
     bool HyperscanDB::BuildFrom(const RegexArray& regexes)
     {
+        const unsigned int common_flags = HS_FLAG_ALLOWEMPTY;
+
         vector<const char*> cstr_patterns;
         vector<unsigned int> all_flags;
         vector<unsigned int> num_seq;
         for (int i = 0; i < regexes.size(); i++) {
             const auto& regex = regexes.get(i);
             cstr_patterns.push_back(regex.pattern.c_str());
-            all_flags.push_back(regex.flags);
+            all_flags.push_back(regex.flags | common_flags);
             num_seq.push_back(i);
         }
 
@@ -40,9 +42,9 @@ namespace logscan
         if (err != HS_SUCCESS) {
             if (compile_err->expression < 0) {
                 // The error does not refer to a particular expression
-                cerr << "ERROR: " << compile_err->message << endl;
+                cerr << "Hyperscan error: " << compile_err->message << endl;
             } else {
-                cerr << "ERROR: Pattern '" << cstr_patterns[compile_err->expression]
+                cerr << "Hyperscan error: Pattern '" << cstr_patterns[compile_err->expression]
                     << "' failed compilation with error: " << compile_err->message << endl;
             }
             // As the compile_err pointer points to dynamically allocated memory, if
@@ -76,15 +78,21 @@ namespace logscan
     int HyperscanDB::OnMatch(unsigned int id, unsigned long long from, unsigned long long to,
         unsigned int flags, void* context)
     {
+        (void)from;
+        (void)to;
+        (void)flags;
+
         static_cast<HyperscanDB*>(context)->match_id_ = id;
-        return 1; // do not continue scanning if the first match was found
+        return 0; // continue scanning
     }
 
     int HyperscanDB::FindRegex(const string& line)
     {
+        match_id_ = -1;
+
         hs_error_t err = hs_scan(db_, line.c_str(), line.size(), 0, scratch_, OnMatch, this);
         if (err != HS_SUCCESS) {
-            cerr << "ERROR: Unable to scan buffer" << endl;
+            cerr << "ERROR: Unable to scan buffer: " << err << endl;
             return -1;
         }
 

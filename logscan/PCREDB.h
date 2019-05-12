@@ -14,6 +14,13 @@ namespace logscan
     class PCREDB
     {
     public:
+        enum MatchResult
+        {
+            PCRE_OK,
+            PCRE_NoMatch,
+            PCRE_Error,
+        };
+
         PCREDB();
         ~PCREDB();
 
@@ -25,7 +32,7 @@ namespace logscan
 
         bool BuildFrom(const RegexArray& regexes);
 
-        bool MatchRegex(int index, const std::string& line, CaptureGroups& capture_groups) const;
+        MatchResult MatchRegex(int index, const std::string& line, CaptureGroups& capture_groups) const;
 
     private:
         struct PCRE

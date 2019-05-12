@@ -34,44 +34,54 @@ namespace logscan
 
     bool Scanner::ProcessLine(const string& line, MatchResults& results)
     {
-        CaptureGroups::iterator message_it = results.capture_groups.end();
+        CaptureGroups::iterator details_it = results.capture_groups.end();
         if (regex_array_.prefix_regex_index() != -1) {
-            if (pcre_db_.MatchRegex(regex_array_.prefix_regex_index(), line, results.capture_groups)) {
-                message_it = results.capture_groups.find("message");
-                // prefix_regex must contain a capture group named "message"
+            if (pcre_db_.MatchRegex(regex_array_.prefix_regex_index(), line, results.capture_groups) == PCREDB::PCRE_OK) {
+                details_it = results.capture_groups.find("details");
+                // prefix_regex must contain a capture group named "details"
             }
         }
 
         const string* message = nullptr;
-        if (message_it != results.capture_groups.end()) {
-            message = &message_it->second;
+        if (details_it != results.capture_groups.end()) {
+            message = &details_it->second;
         } else {
             message = &line;
         }
 
         const int regex_index = hs_db_.FindRegex(*message);
-        results.regex_id = regex_array_.get(regex_index).id;
-        if (regex_index == -1)
+        if (regex_index == -1) {
+            results.regex_id = "";
             return false;
-
-        if (!pcre_db_.MatchRegex(regex_index, *message, results.capture_groups))
-            return false;
-
-        if (message_it != results.capture_groups.end()) {
-            results.capture_groups.erase(message_it); // delete "message" from the output
         }
+
+        results.regex_id = regex_array_.get(regex_index).id;
+        const PCREDB::MatchResult result = pcre_db_.MatchRegex(regex_index, *message, results.capture_groups);
+        if (result != PCREDB::PCRE_OK) {
+            if (result == PCREDB::PCRE_NoMatch) {
+                // This can happen as PCRE does a greedy match while HS doesn't
+                cerr << "Mismatch between Hyperscan and PCRE for regex id: " << results.regex_id << endl;
+            }
+            return false;
+        }
+
+        if (details_it != results.capture_groups.end()) {
+            results.capture_groups.erase(details_it); // delete "details" from the output
+        }
+
+        return true;
     }
 
     bool Scanner::ScanStream(istream& input_stream)
     {
         for (string line; getline(input_stream, line); ) {
-            line.push_back('\n');
-
             MatchResults results;
             if (ProcessLine(line, results)) {
                 match_fn_(results);
             }
         }
+
+        return true;
     }
 
     void PrintJSONMatchFn(const MatchResults& results, ostream& output_stream)

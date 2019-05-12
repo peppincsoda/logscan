@@ -5,3 +5,4 @@ services:
     volumes:
       - "c:\\work\\logscan_project:/root/logscan_project"
       - "c:\\work\\logscan_testdata:/root/testdata"
+    privileged: true

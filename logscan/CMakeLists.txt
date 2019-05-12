@@ -30,6 +30,12 @@ if (PKG_CONFIG_FOUND)
   endif()
 endif()
 
+if(MSVC)
+  target_compile_options(logscan PRIVATE /W4 /WX)
+else()
+  target_compile_options(logscan PRIVATE -Wall -Wextra -pedantic -Werror)
+endif()
+
 set(SOURCES_TEST
     Scanner_test.cc
     )
@@ -37,3 +43,9 @@ set(SOURCES_TEST
 add_executable(logscan_test ${SOURCES_TEST})
 
 target_link_libraries(logscan_test logscan gtest_main gtest pthread)
+
+if(MSVC)
+  target_compile_options(logscan_test PRIVATE /W4 /WX)
+else()
+  target_compile_options(logscan_test PRIVATE -Wall -Wextra -pedantic -Werror)
+endif()
