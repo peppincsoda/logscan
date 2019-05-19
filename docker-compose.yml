@@ -1,8 +1,16 @@
 version: '3'
 services:
   devenv:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
     volumes:
       - "c:\\work\\logscan_project:/root/logscan_project"
       - "c:\\work\\logscan_testdata:/root/testdata"
     privileged: true
+
+  prodenv:
+    build: .
+    image: logscan_cli:latest
+    volumes:
+      - "c:\\work\\logscan_testdata:/root/testdata"
