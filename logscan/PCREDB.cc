@@ -70,7 +70,7 @@ namespace logscan
         }
     }
 
-    PCREDB::MatchResult PCREDB::MatchRegex(int index, const std::string& line, CaptureGroups& capture_groups) const
+    PCREMatchResult PCREDB::MatchRegex(int index, const std::string& line, CaptureGroups& capture_groups) const
     {
         const PCRE& pcre_data = pcres_[index];
 
@@ -88,10 +88,10 @@ namespace logscan
         if (rc < 0) {
             switch(rc) {
             case PCRE_ERROR_NOMATCH:
-                return PCRE_NoMatch;
+                return PCREMatchResult::NoMatch;
             default:
                 cerr << "PCRE matching error: " << rc << endl;
-                return PCRE_Error;
+                return PCREMatchResult::Error;
             }
         }
 
@@ -108,7 +108,7 @@ namespace logscan
             }
         }
 
-        return PCRE_OK;
+        return PCREMatchResult::OK;
     }
 
 } // namespace logscan

@@ -11,16 +11,16 @@ namespace logscan
 {
     using CaptureGroups = std::unordered_map<std::string, std::string>;
 
+    enum class PCREMatchResult
+    {
+        OK,
+        NoMatch,
+        Error,
+    };
+
     class PCREDB
     {
     public:
-        enum MatchResult
-        {
-            PCRE_OK,
-            PCRE_NoMatch,
-            PCRE_Error,
-        };
-
         PCREDB();
         ~PCREDB();
 
@@ -32,7 +32,7 @@ namespace logscan
 
         bool BuildFrom(const RegexArray& regexes);
 
-        MatchResult MatchRegex(int index, const std::string& line, CaptureGroups& capture_groups) const;
+        PCREMatchResult MatchRegex(int index, const std::string& line, CaptureGroups& capture_groups) const;
 
     private:
         struct PCRE

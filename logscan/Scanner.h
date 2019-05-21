@@ -21,7 +21,7 @@ namespace logscan
     class Scanner
     {
     public:
-        explicit Scanner(ScannerMatchFn match_fn);
+        explicit Scanner(ScannerMatchFn match_fn, bool perf_stats = false);
         ~Scanner();
 
         Scanner(const Scanner&) = delete;
@@ -41,6 +41,7 @@ namespace logscan
         HyperscanDB hs_db_;
         PCREDB pcre_db_;
         ScannerMatchFn match_fn_;
+        bool perf_stats_;
     };
 
     void PrintJSONMatchFn(const MatchResults& results, std::ostream& output_stream);

@@ -9,22 +9,26 @@ using namespace std;
 using namespace logscan;
 
 static void Usage(const char* prog) {
-    cerr << "Usage: " << prog << " -p <pattern file> [-o <output file>] [<input file>...]" << endl;
+    cerr << "Usage: " << prog << " -p <pattern file> [-o <output file>] [-s] [<input file>...]" << endl;
 }
 
 int main(int argc, char** argv) {
     const char* patterns_file = nullptr;
     const char* output_file = nullptr;
+    bool perf_stats = false;
 
     // Process command line arguments
     int opt;
-    while ((opt = getopt(argc, argv, "p:o:")) != -1) {
+    while ((opt = getopt(argc, argv, "p:o:s")) != -1) {
         switch (opt) {
         case 'p':
             patterns_file = optarg;
             break;
         case 'o':
             output_file = optarg;
+            break;
+        case 's':
+            perf_stats = true;
             break;
         default:
             Usage(argv[0]);
@@ -53,7 +57,7 @@ int main(int argc, char** argv) {
     auto match_fn = [p_output_stream](const MatchResults& match_results) {
         PrintJSONMatchFn(match_results, *p_output_stream);
     };
-    Scanner scanner(match_fn);
+    Scanner scanner(match_fn, perf_stats);
     if (!scanner.BuildFrom(patterns_file))
         return -1;
 
